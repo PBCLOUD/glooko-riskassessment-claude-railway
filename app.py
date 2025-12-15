@@ -51,7 +51,7 @@ def health_check():
     """Health check endpoint for Railway - no auth required"""
     return jsonify({'status': 'healthy', 'app': 'risk-assessment-tracker'}), 200
 
-# Fix for postgres:// vs postgresql:// (required for Railway PostgreSQL)
+# Fix for Render's postgres:// vs postgresql://
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql://', 1)
 
@@ -473,15 +473,17 @@ def import_data():
             if not ctrl_col:
                 ctrl_col = df_controls.columns[0]
             
+            ctrl_counter = 1
             for _, row in df_controls.iterrows():
-                ctrl_id = row.get(ctrl_col)
-                if pd.notna(ctrl_id):
-                    ctrl_id = str(ctrl_id).strip()
+                ctrl_text = row.get(ctrl_col)
+                if pd.notna(ctrl_text):
+                    ctrl_text = str(ctrl_text).strip()
+                    # Generate a short ID
+                    ctrl_id = f"C-{ctrl_counter:04d}"
                     if not Control.query.get(ctrl_id):
-                        desc_col = [c for c in df_controls.columns if 'description' in c.lower() or 'engineering' in c.lower()]
-                        desc = str(row[desc_col[0]])[:1000] if desc_col and pd.notna(row.get(desc_col[0])) else None
-                        db.session.add(Control(id=ctrl_id, name=ctrl_id, description=desc))
+                        db.session.add(Control(id=ctrl_id, name=ctrl_id, description=ctrl_text[:1000]))
                         imported_controls += 1
+                        ctrl_counter += 1
             db.session.commit()
         
         # Import Risk Assessments
