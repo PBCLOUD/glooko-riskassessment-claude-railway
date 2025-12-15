@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Controls{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+        <h2><i class="bi bi-shield me-2"></i>Control Measures</h2>
+        <p class="text-muted">{{ controls|length }} controls mitigating identified risks</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-header">
+                <tr>
+                    <th style="width: 80px">ID</th>
+                    <th style="width: 200px">Name</th>
+                    <th>Description</th>
+                    <th style="width: 100px">Category</th>
+                    <th style="width: 80px">Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for control in controls %}
+                <tr>
+                    <td><strong>{{ control.id }}</strong></td>
+                    <td>{{ control.name }}</td>
+                    <td><small>{{ control.description[:150] if control.description else '-' }}{% if control.description and control.description|length > 150 %}...{% endif %}</small></td>
+                    <td><span class="badge bg-secondary">{{ control.category_tag or '-' }}</span></td>
+                    <td>
+                        {% if control.is_active %}
+                            <span class="badge bg-success">Active</span>
+                        {% else %}
+                            <span class="badge bg-danger">Inactive</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="5" class="text-center text-muted py-4">No controls found</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

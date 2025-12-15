@@ -1,0 +1,217 @@
+{% extends "base.html" %}
+{% block title %}Risk #{{ risk.assessment_number }}{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('risk_list') }}">Risks</a></li>
+                <li class="breadcrumb-item active">Risk #{{ risk.assessment_number }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Risk Details -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-shield-exclamation me-2"></i>Risk Assessment #{{ risk.assessment_number }}</span>
+                <span class="badge bg-light text-dark">{{ risk.assessment_year }}</span>
+            </div>
+            <div class="card-body">
+                <!-- Asset & Classification -->
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">THREAT MODEL ASSET</label>
+                        <p class="fw-bold">{{ risk.asset.name }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-muted small">OPERATION</label>
+                        <p>{{ risk.operation or '-' }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-muted small">PLATFORM</label>
+                        <p>{{ risk.platform or '-' }}</p>
+                    </div>
+                </div>
+
+                <!-- STRIDE & Finding -->
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <label class="form-label text-muted small">STRIDE CATEGORY</label>
+                        <p>
+                            <span class="badge bg-secondary fs-6">{{ risk.stride_code }}</span>
+                            {{ risk.stride.name if risk.stride else '' }}
+                        </p>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-muted small">FINDING #</label>
+                        <p>{{ risk.finding_number or '-' }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-muted small">SEVERITY</label>
+                        <p>{{ risk.severity.name if risk.severity else '-' }}</p>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label text-muted small">MODEL REF</label>
+                        <p>{{ risk.model_ref or '-' }}</p>
+                    </div>
+                </div>
+
+                <!-- STRIDE Description -->
+                <div class="mb-4">
+                    <label class="form-label text-muted small">STRIDE DESCRIPTION</label>
+                    <p class="border rounded p-2 bg-light">{{ risk.stride_description or 'No description available' }}</p>
+                </div>
+
+                <!-- Pre-Mitigation -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <h6 class="text-muted"><i class="bi bi-arrow-right me-2"></i>PRE-MITIGATION (Original Assessment)</h6>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">EXPLOIT RISK</label>
+                        <p>{{ risk.pre_exploit_risk.name if risk.pre_exploit_risk else '-' }}</p>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label text-muted small">RISK RATING</label>
+                        <p>
+                            {% if risk.pre_risk_rating %}
+                                {% if risk.pre_risk_rating.name == 'Acceptable' %}
+                                    <span class="badge bg-success">{{ risk.pre_risk_rating.name }}</span>
+                                {% elif risk.pre_risk_rating.name == 'Mitigation Desirable' %}
+                                    <span class="badge bg-warning text-dark">{{ risk.pre_risk_rating.name }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger">{{ risk.pre_risk_rating.name }}</span>
+                                {% endif %}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="mb-4">
+                    <label class="form-label text-muted small">APPLIED CONTROLS</label>
+                    <p>{{ risk.control_ids or 'None specified' }}</p>
+                </div>
+
+                <!-- Reference Docs -->
+                <div class="mb-4">
+                    <label class="form-label text-muted small">REFERENCE DOCUMENTS</label>
+                    <p class="small">{{ risk.reference_docs or 'None specified' }}</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Form -->
+    <div class="col-md-4">
+        <div class="card border-primary">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-pencil-square me-2"></i>Update 2026 Assessment
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('risk_update', risk_id=risk.id) }}">
+                    <!-- Post-Mitigation Exploit Risk -->
+                    <div class="mb-3">
+                        <label class="form-label">Post-Mitigation Exploit Risk (2026)</label>
+                        <select name="post_exploit_risk_id" class="form-select">
+                            {% for level in exploit_levels %}
+                            <option value="{{ level.id }}" {% if risk.post_exploit_risk_id == level.id %}selected{% endif %}>
+                                {{ level.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Post-Mitigation Risk Rating -->
+                    <div class="mb-3">
+                        <label class="form-label">Post-Mitigation Risk Rating (2026)</label>
+                        <select name="post_risk_rating_id" class="form-select">
+                            {% for rating in ratings %}
+                            <option value="{{ rating.id }}" {% if risk.post_risk_rating_id == rating.id %}selected{% endif %}>
+                                {{ rating.name }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+
+                    <!-- Review Status -->
+                    <div class="mb-3">
+                        <label class="form-label">Review Status</label>
+                        <select name="review_status" class="form-select">
+                            <option value="pending" {% if risk.review_status == 'pending' %}selected{% endif %}>Pending Review</option>
+                            <option value="reviewed" {% if risk.review_status == 'reviewed' %}selected{% endif %}>Reviewed</option>
+                            <option value="approved" {% if risk.review_status == 'approved' %}selected{% endif %}>Approved</option>
+                        </select>
+                    </div>
+
+                    <!-- Reviewer -->
+                    <div class="mb-3">
+                        <label class="form-label">Reviewed By</label>
+                        <input type="text" name="reviewed_by" class="form-control" value="{{ risk.reviewed_by or '' }}" placeholder="Your name">
+                    </div>
+
+                    <!-- Notes -->
+                    <div class="mb-3">
+                        <label class="form-label">Notes</label>
+                        <textarea name="notes" class="form-control" rows="3" placeholder="Add notes about this assessment...">{{ risk.notes or '' }}</textarea>
+                    </div>
+
+                    <div class="d-grid gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-2"></i>Save Changes
+                        </button>
+                        <a href="{{ url_for('risk_list') }}" class="btn btn-outline-secondary">
+                            <i class="bi bi-arrow-left me-2"></i>Back to List
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Audit Log -->
+        {% if audit_logs %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-clock-history me-2"></i>Change History
+            </div>
+            <div class="card-body p-0">
+                <ul class="list-group list-group-flush">
+                    {% for log in audit_logs[:5] %}
+                    <li class="list-group-item small">
+                        <strong>{{ log.field_changed }}</strong> changed<br>
+                        <span class="text-muted">{{ log.old_value }} → {{ log.new_value }}</span><br>
+                        <small class="text-muted">{{ log.changed_by }} · {{ log.changed_at.strftime('%m/%d/%Y %H:%M') }}</small>
+                    </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Navigation -->
+<div class="row mt-4">
+    <div class="col-12 d-flex justify-content-between">
+        {% if risk.assessment_number > 1 %}
+        <a href="{{ url_for('risk_detail', risk_id=risk.id - 1) }}" class="btn btn-outline-primary">
+            <i class="bi bi-chevron-left me-2"></i>Previous Risk
+        </a>
+        {% else %}
+        <span></span>
+        {% endif %}
+        
+        <a href="{{ url_for('risk_detail', risk_id=risk.id + 1) }}" class="btn btn-outline-primary">
+            Next Risk<i class="bi bi-chevron-right ms-2"></i>
+        </a>
+    </div>
+</div>
+{% endblock %}

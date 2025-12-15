@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="row mt-4">
+    <div class="col-12">
+        <h2><i class="bi bi-speedometer2 me-2"></i>Dashboard</h2>
+        <p class="text-muted">2026 Cybersecurity Risk Assessment Progress</p>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row mt-3">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-number">{{ total_risks }}</div>
+                <div class="text-muted">Total Risk Items</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-number">{{ total_assets }}</div>
+                <div class="text-muted">Threat Model Assets</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-number">{{ total_controls }}</div>
+                <div class="text-muted">Control Measures</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-number">{{ pending_review }}</div>
+                <div class="text-muted">Pending Review</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Progress and Charts -->
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-pie-chart me-2"></i>Review Progress
+            </div>
+            <div class="card-body text-center">
+                <canvas id="progressChart" width="200" height="200"></canvas>
+                <div class="mt-3">
+                    <span class="badge bg-success">{{ reviewed }} Reviewed</span>
+                    <span class="badge bg-warning text-dark">{{ pending_review }} Pending</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-bar-chart me-2"></i>Risk Rating Distribution
+            </div>
+            <div class="card-body">
+                <canvas id="ratingChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-grid me-2"></i>STRIDE-L Distribution
+            </div>
+            <div class="card-body">
+                <canvas id="strideChart" height="200"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions and Recent Activity -->
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-lightning me-2"></i>Quick Actions
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-2">
+                    <a href="{{ url_for('risk_list', status='pending') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-hourglass-split me-2"></i>View Pending Reviews ({{ pending_review }})
+                    </a>
+                    <a href="{{ url_for('risk_list') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-list-check me-2"></i>View All Risks
+                    </a>
+                    <a href="{{ url_for('asset_list') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-diagram-3 me-2"></i>Browse by Asset
+                    </a>
+                    <a href="{{ url_for('export_excel') }}" class="btn btn-outline-success">
+                        <i class="bi bi-file-earmark-excel me-2"></i>Export to Excel
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-clock-history me-2"></i>Recent Activity
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover">
+                        <thead>
+                            <tr>
+                                <th>#</th>
+                                <th>Asset</th>
+                                <th>STRIDE</th>
+                                <th>Status</th>
+                                <th>Updated</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for risk in recent_updates %}
+                            <tr>
+                                <td><a href="{{ url_for('risk_detail', risk_id=risk.id) }}">{{ risk.assessment_number }}</a></td>
+                                <td>{{ risk.asset.name[:30] }}{% if risk.asset.name|length > 30 %}...{% endif %}</td>
+                                <td><span class="badge bg-secondary">{{ risk.stride_code }}</span></td>
+                                <td>
+                                    {% if risk.review_status == 'pending' %}
+                                        <span class="badge bg-warning text-dark">Pending</span>
+                                    {% elif risk.review_status == 'reviewed' %}
+                                        <span class="badge bg-info">Reviewed</span>
+                                    {% else %}
+                                        <span class="badge bg-success">Approved</span>
+                                    {% endif %}
+                                </td>
+                                <td><small>{{ risk.updated_at.strftime('%m/%d %H:%M') if risk.updated_at else '-' }}</small></td>
+                            </tr>
+                            {% else %}
+                            <tr>
+                                <td colspan="5" class="text-center text-muted">No recent activity</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Progress Chart
+const progressCtx = document.getElementById('progressChart').getContext('2d');
+new Chart(progressCtx, {
+    type: 'doughnut',
+    data: {
+        labels: ['Reviewed', 'Pending'],
+        datasets: [{
+            data: [{{ reviewed }}, {{ pending_review }}],
+            backgroundColor: ['#2D5016', '#ffc107'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        cutout: '70%',
+        plugins: {
+            legend: { position: 'bottom' }
+        }
+    }
+});
+
+// Rating Distribution Chart
+const ratingCtx = document.getElementById('ratingChart').getContext('2d');
+new Chart(ratingCtx, {
+    type: 'bar',
+    data: {
+        labels: [{% for r in rating_dist %}'{{ r[0] }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+        datasets: [{
+            label: 'Count',
+            data: [{% for r in rating_dist %}{{ r[1] }}{% if not loop.last %}, {% endif %}{% endfor %}],
+            backgroundColor: ['#28a745', '#ffc107', '#dc3545'],
+            borderWidth: 0
+        }]
+    },
+    options: {
+        indexAxis: 'y',
+        plugins: { legend: { display: false } },
+        scales: { x: { beginAtZero: true } }
+    }
+});
+
+// STRIDE Chart
+const strideCtx = document.getElementById('strideChart').getContext('2d');
+new Chart(strideCtx, {
+    type: 'bar',
+    data: {
+        labels: [{% for s in stride_dist %}'{{ s[0] }}'{% if not loop.last %}, {% endif %}{% endfor %}],
+        datasets: [{
+            label: 'Risks',
+            data: [{% for s in stride_dist %}{{ s[2] }}{% if not loop.last %}, {% endif %}{% endfor %}],
+            backgroundColor: '#4A7C23',
+            borderWidth: 0
+        }]
+    },
+    options: {
+        plugins: { legend: { display: false } },
+        scales: { y: { beginAtZero: true } }
+    }
+});
+</script>
+{% endblock %}
