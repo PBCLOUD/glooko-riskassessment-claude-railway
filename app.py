@@ -2,8 +2,9 @@
 Glooko Risk Assessment Tracker
 Flask application for managing cybersecurity risk assessments
 """
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, send_file, Response
 from flask_sqlalchemy import SQLAlchemy
+from functools import wraps
 from datetime import datetime
 import os
 
@@ -11,6 +12,44 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-prod')
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///data/risk_assessment.db')
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# ============================================================
+# BASIC AUTH CONFIGURATION
+# ============================================================
+
+# Set these in Railway environment variables
+AUTH_USERNAME = os.environ.get('AUTH_USERNAME', 'glooko')
+AUTH_PASSWORD = os.environ.get('AUTH_PASSWORD', 'risk2026')
+
+def check_auth(username, password):
+    """Check if username/password combination is valid"""
+    return username == AUTH_USERNAME and password == AUTH_PASSWORD
+
+def authenticate():
+    """Send 401 response to enable basic auth"""
+    return Response(
+        'Access denied. Please provide valid credentials.', 401,
+        {'WWW-Authenticate': 'Basic realm="Glooko Risk Assessment"'}
+    )
+
+def requires_auth(f):
+    """Decorator to require authentication"""
+    @wraps(f)
+    def decorated(*args, **kwargs):
+        auth = request.authorization
+        if not auth or not check_auth(auth.username, auth.password):
+            return authenticate()
+        return f(*args, **kwargs)
+    return decorated
+
+# ============================================================
+# HEALTH CHECK (No Auth Required)
+# ============================================================
+
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Railway - no auth required"""
+    return jsonify({'status': 'healthy', 'app': 'risk-assessment-tracker'}), 200
 
 # Fix for Render's postgres:// vs postgresql://
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
@@ -113,6 +152,7 @@ class AuditLog(db.Model):
 # ============================================================
 
 @app.route('/')
+@requires_auth
 def dashboard():
     """Main dashboard with summary statistics"""
     total_risks = RiskAssessment.query.count()
@@ -152,6 +192,7 @@ def dashboard():
     )
 
 @app.route('/risks')
+@requires_auth
 def risk_list():
     """List all risk assessments with filtering"""
     # Get filter parameters
@@ -201,6 +242,7 @@ def risk_list():
     )
 
 @app.route('/risks/<int:risk_id>')
+@requires_auth
 def risk_detail(risk_id):
     """View and edit a single risk assessment"""
     risk = RiskAssessment.query.get_or_404(risk_id)
@@ -218,6 +260,7 @@ def risk_detail(risk_id):
     )
 
 @app.route('/risks/<int:risk_id>/update', methods=['POST'])
+@requires_auth
 def risk_update(risk_id):
     """Update a risk assessment"""
     risk = RiskAssessment.query.get_or_404(risk_id)
@@ -276,6 +319,7 @@ def risk_update(risk_id):
     return redirect(url_for('risk_detail', risk_id=risk_id))
 
 @app.route('/assets')
+@requires_auth
 def asset_list():
     """List all assets"""
     assets = Asset.query.order_by(Asset.name).all()
@@ -291,12 +335,14 @@ def asset_list():
     return render_template('assets.html', assets=assets, stats=stats_dict)
 
 @app.route('/controls')
+@requires_auth
 def control_list():
     """List all controls"""
     controls = Control.query.order_by(Control.id).all()
     return render_template('controls.html', controls=controls)
 
 @app.route('/export/excel')
+@requires_auth
 def export_excel():
     """Export risk assessment to Excel"""
     # This would generate the Excel file
@@ -304,6 +350,7 @@ def export_excel():
     return redirect(url_for('dashboard'))
 
 @app.route('/api/stats')
+@requires_auth
 def api_stats():
     """API endpoint for dashboard statistics"""
     total_risks = RiskAssessment.query.count()
