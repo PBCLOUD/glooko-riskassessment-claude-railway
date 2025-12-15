@@ -493,15 +493,22 @@ def import_data():
                 num_col = col
                 break
         
-        for _, row in df_risks.iterrows():
+        # Get existing assessment numbers to skip
+        existing_nums = set(r.assessment_number for r in RiskAssessment.query.with_entities(RiskAssessment.assessment_number).all())
+        
+        batch = []
+        for idx, row in df_risks.iterrows():
             # Get assessment number
             if num_col and pd.notna(row.get(num_col)):
-                assessment_num = int(row[num_col])
+                try:
+                    assessment_num = int(row[num_col])
+                except:
+                    assessment_num = imported_risks + len(batch) + 1
             else:
-                assessment_num = imported_risks + 1
+                assessment_num = imported_risks + len(batch) + 1
             
             # Skip if exists
-            if RiskAssessment.query.filter_by(assessment_number=assessment_num).first():
+            if assessment_num in existing_nums:
                 continue
             
             # Get asset
@@ -527,13 +534,21 @@ def import_data():
                 review_status='pending',
                 assessment_year=2025
             )
-            db.session.add(risk)
-            imported_risks += 1
+            batch.append(risk)
+            existing_nums.add(assessment_num)
             
-            if imported_risks % 100 == 0:
+            # Commit every 50 records
+            if len(batch) >= 50:
+                db.session.bulk_save_objects(batch)
                 db.session.commit()
+                imported_risks += len(batch)
+                batch = []
         
-        db.session.commit()
+        # Commit remaining
+        if batch:
+            db.session.bulk_save_objects(batch)
+            db.session.commit()
+            imported_risks += len(batch)
         
         return f'''
         <!DOCTYPE html>
