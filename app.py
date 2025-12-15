@@ -51,7 +51,7 @@ def health_check():
     """Health check endpoint for Railway - no auth required"""
     return jsonify({'status': 'healthy', 'app': 'risk-assessment-tracker'}), 200
 
-# Fix for Render's postgres:// vs postgresql://
+# Fix for postgres:// vs postgresql:// (required for Railway PostgreSQL)
 if app.config['SQLALCHEMY_DATABASE_URI'].startswith('postgres://'):
     app.config['SQLALCHEMY_DATABASE_URI'] = app.config['SQLALCHEMY_DATABASE_URI'].replace('postgres://', 'postgresql://', 1)
 

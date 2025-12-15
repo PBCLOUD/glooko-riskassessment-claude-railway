@@ -50,8 +50,7 @@ python app.py
 
 | Platform | Guide | Setup Time | Cost |
 |----------|-------|------------|------|
-| 🚂 **Railway** | [railway/README.md](railway/README.md) | 5 min | Free |
-| 🎨 **Render** | [render/README.md](render/README.md) | 5 min | Free |
+| 🚂 **Railway** | [DEPLOY-RAILWAY.md](DEPLOY-RAILWAY.md) | 5 min | Free |
 | 💻 **Local Mac** | See Quick Start above | 2 min | $0 |
 
 ---
@@ -63,7 +62,8 @@ risk-assessment-app/
 ├── app.py                  # Main Flask application
 ├── import_data.py          # Excel data import script
 ├── requirements.txt        # Python dependencies
-├── Procfile               # Process definition
+├── Procfile               # Process definition for Railway
+├── railway.toml           # Railway deployment config
 ├── templates/             # HTML templates
 │   ├── base.html          # Base layout
 │   ├── dashboard.html     # Main dashboard
@@ -71,12 +71,6 @@ risk-assessment-app/
 │   ├── risk_detail.html   # Risk edit form
 │   ├── assets.html        # Asset browser
 │   └── controls.html      # Control library
-├── railway/               # Railway deployment config
-│   ├── railway.toml
-│   └── README.md
-├── render/                # Render deployment config
-│   ├── render.yaml
-│   └── README.md
 └── data/                  # SQLite database (local only)
     └── risk_assessment.db
 ```
@@ -176,7 +170,7 @@ python import_data.py RISK-0003_09.xlsx
 ⚠️ **This app handles sensitive cybersecurity risk data**
 
 - Do not expose to public internet without authentication
-- Use HTTPS in production (Railway/Render provide this)
+- Use HTTPS in production (Railway provides this)
 - Regularly backup the database
 - Check with Security Officer before cloud deployment
 
