@@ -365,6 +365,234 @@ def api_stats():
     })
 
 # ============================================================
+# IMPORT DATA VIA WEB UI
+# ============================================================
+
+@app.route('/import', methods=['GET', 'POST'])
+@requires_auth
+def import_data():
+    """Import Excel data via web upload"""
+    import pandas as pd
+    from io import BytesIO
+    
+    if request.method == 'GET':
+        # Show upload form
+        return '''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Import Data - Risk Assessment</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <style>body { background: #f5f5f5; } .card { max-width: 600px; margin: 50px auto; }</style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4><i class="bi bi-upload"></i> Import Risk Assessment Data</h4>
+                </div>
+                <div class="card-body">
+                    <form method="POST" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label class="form-label">Select Excel File (.xlsx)</label>
+                            <input type="file" name="file" class="form-control" accept=".xlsx,.xls" required>
+                        </div>
+                        <div class="mb-3">
+                            <small class="text-muted">
+                                Upload your RISK-0003 Excel file with sheets: RiskAssessment-Detailed, ControlMeasures
+                            </small>
+                        </div>
+                        <button type="submit" class="btn btn-success">Upload & Import</button>
+                        <a href="/" class="btn btn-outline-secondary">Cancel</a>
+                    </form>
+                </div>
+            </div>
+        </body>
+        </html>
+        '''
+    
+    # Handle POST - process upload
+    if 'file' not in request.files:
+        return 'No file uploaded', 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return 'No file selected', 400
+    
+    try:
+        # Read Excel file
+        xl = pd.ExcelFile(BytesIO(file.read()))
+        
+        # Find the risk assessment sheet (flexible naming)
+        risk_sheet = None
+        for sheet in xl.sheet_names:
+            if 'risk' in sheet.lower() and 'detail' in sheet.lower():
+                risk_sheet = sheet
+                break
+        if not risk_sheet:
+            risk_sheet = xl.sheet_names[0]  # Default to first sheet
+        
+        df_risks = pd.read_excel(xl, risk_sheet)
+        
+        # Try to find controls sheet
+        df_controls = None
+        for sheet in xl.sheet_names:
+            if 'control' in sheet.lower():
+                df_controls = pd.read_excel(xl, sheet)
+                break
+        
+        imported_assets = 0
+        imported_risks = 0
+        imported_controls = 0
+        
+        # Import Assets from unique values in THREAT MODEL ASSET column
+        asset_col = None
+        for col in df_risks.columns:
+            if 'threat' in col.lower() and 'asset' in col.lower():
+                asset_col = col
+                break
+        
+        if asset_col:
+            for asset_name in df_risks[asset_col].dropna().unique():
+                asset_name = str(asset_name).strip()
+                if asset_name and not Asset.query.filter_by(name=asset_name).first():
+                    asset_type = 'DataFlow' if ' to ' in asset_name else 'Component'
+                    db.session.add(Asset(name=asset_name, asset_type=asset_type))
+                    imported_assets += 1
+            db.session.commit()
+        
+        # Build asset lookup
+        asset_map = {a.name: a.id for a in Asset.query.all()}
+        
+        # Import Controls if sheet exists
+        if df_controls is not None:
+            ctrl_col = None
+            for col in df_controls.columns:
+                if 'control' in col.lower() and 'measure' in col.lower():
+                    ctrl_col = col
+                    break
+            if not ctrl_col:
+                ctrl_col = df_controls.columns[0]
+            
+            for _, row in df_controls.iterrows():
+                ctrl_id = row.get(ctrl_col)
+                if pd.notna(ctrl_id):
+                    ctrl_id = str(ctrl_id).strip()
+                    if not Control.query.get(ctrl_id):
+                        desc_col = [c for c in df_controls.columns if 'description' in c.lower() or 'engineering' in c.lower()]
+                        desc = str(row[desc_col[0]])[:1000] if desc_col and pd.notna(row.get(desc_col[0])) else None
+                        db.session.add(Control(id=ctrl_id, name=ctrl_id, description=desc))
+                        imported_controls += 1
+            db.session.commit()
+        
+        # Import Risk Assessments
+        num_col = None
+        for col in df_risks.columns:
+            if col == '#' or 'number' in col.lower():
+                num_col = col
+                break
+        
+        for _, row in df_risks.iterrows():
+            # Get assessment number
+            if num_col and pd.notna(row.get(num_col)):
+                assessment_num = int(row[num_col])
+            else:
+                assessment_num = imported_risks + 1
+            
+            # Skip if exists
+            if RiskAssessment.query.filter_by(assessment_number=assessment_num).first():
+                continue
+            
+            # Get asset
+            asset_name = str(row.get(asset_col, '')).strip() if asset_col and pd.notna(row.get(asset_col)) else None
+            asset_id = asset_map.get(asset_name)
+            
+            if not asset_id:
+                continue
+            
+            # Get STRIDE code
+            stride_col = [c for c in df_risks.columns if 'stridel' in c.lower() or 'stride' in c.lower()]
+            stride_code = str(row[stride_col[0]])[:1] if stride_col and pd.notna(row.get(stride_col[0])) else None
+            
+            # Get description
+            desc_col = [c for c in df_risks.columns if 'description' in c.lower() and 'stride' in c.lower()]
+            stride_desc = str(row[desc_col[0]])[:500] if desc_col and pd.notna(row.get(desc_col[0])) else None
+            
+            risk = RiskAssessment(
+                assessment_number=assessment_num,
+                asset_id=asset_id,
+                stride_code=stride_code,
+                stride_description=stride_desc,
+                review_status='pending',
+                assessment_year=2025
+            )
+            db.session.add(risk)
+            imported_risks += 1
+            
+            if imported_risks % 100 == 0:
+                db.session.commit()
+        
+        db.session.commit()
+        
+        return f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Import Complete</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <style>body {{ background: #f5f5f5; }} .card {{ max-width: 600px; margin: 50px auto; }}</style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h4>✅ Import Complete!</h4>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group mb-3">
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Assets imported:</span>
+                            <strong>{imported_assets}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Controls imported:</span>
+                            <strong>{imported_controls}</strong>
+                        </li>
+                        <li class="list-group-item d-flex justify-content-between">
+                            <span>Risks imported:</span>
+                            <strong>{imported_risks}</strong>
+                        </li>
+                    </ul>
+                    <a href="/" class="btn btn-success">Go to Dashboard</a>
+                </div>
+            </div>
+        </body>
+        </html>
+        '''
+    
+    except Exception as e:
+        return f'''
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <title>Import Error</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+            <style>body {{ background: #f5f5f5; }} .card {{ max-width: 600px; margin: 50px auto; }}</style>
+        </head>
+        <body>
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h4>❌ Import Error</h4>
+                </div>
+                <div class="card-body">
+                    <p class="text-danger">{str(e)}</p>
+                    <a href="/import" class="btn btn-primary">Try Again</a>
+                    <a href="/" class="btn btn-outline-secondary">Cancel</a>
+                </div>
+            </div>
+        </body>
+        </html>
+        ''', 500
+
+# ============================================================
 # DATABASE INITIALIZATION
 # ============================================================
 
